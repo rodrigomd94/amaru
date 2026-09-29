@@ -61,6 +61,8 @@ where
 
 #[derive(thiserror::Error, Debug)]
 pub enum RuntimeError<'a> {
+    #[error("Integer operand is outside the signed 262144-bit range")]
+    IntegerOperandOutOfBounds,
     #[error("Byte string operand exceeds 65536 bytes: {0}")]
     ByteStringOperandTooLarge(usize),
     #[error("Constructor tag is outside the Word64 range: {0}")]

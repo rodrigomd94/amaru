@@ -123,6 +123,22 @@ where
 }
 
 impl<'a> Machine<'a> {
+    fn unwrap_integer_operand<V>(&self, value: &'a Value<'a, V>) -> Result<&'a Integer, MachineError<'a, V>>
+    where
+        V: Eval<'a>,
+    {
+        // CInteger is [-2^262143, 2^262143 - 1]. The negative endpoint has
+        // one extra magnitude bit; results and unrestricted Integer arguments
+        // (including equalsInteger and iData) do not use this check.
+        static MIN_INTEGER: once_cell::sync::Lazy<Integer> =
+            once_cell::sync::Lazy::new(|| -(Integer::from(1) << 262_143usize));
+        let integer = value.unwrap_integer()?;
+        if self.costs.semantics.integer_operand_range_checks() && integer.bits() > 262_143 && integer != &*MIN_INTEGER {
+            return Err(MachineError::runtime(RuntimeError::IntegerOperandOutOfBounds));
+        }
+        Ok(integer)
+    }
+
     // Only CByteString arguments use this check. Results, BData, lengthOfByteString,
     // signature keys, and hash-to-group domain separators remain unrestricted here.
     fn unwrap_byte_string_operand<V>(&self, value: &'a Value<'a, V>) -> Result<&'a [u8], MachineError<'a, V>>
@@ -142,8 +158,8 @@ impl<'a> Machine<'a> {
     {
         match runtime.fun {
             DefaultFunction::AddInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -323,7 +339,11 @@ impl<'a> Machine<'a> {
                 Ok(arg2)
             }
             DefaultFunction::ConsByteString => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
+                let arg1 = if self.costs.semantics.cons_byte_string_range_checks() {
+                    runtime.args[0].unwrap_integer()?
+                } else {
+                    self.unwrap_integer_operand(runtime.args[0])?
+                };
                 let arg2 = self.unwrap_byte_string_operand(runtime.args[1])?;
 
                 let budget = self
@@ -415,8 +435,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::DivideInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -693,8 +713,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::LessThanEqualsInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -714,8 +734,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::LessThanInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -899,8 +919,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::ModInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -921,8 +941,8 @@ impl<'a> Machine<'a> {
                 }
             }
             DefaultFunction::MultiplyInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -959,8 +979,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::QuotientInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -983,8 +1003,8 @@ impl<'a> Machine<'a> {
                 }
             }
             DefaultFunction::RemainderInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -1138,8 +1158,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::SubtractInteger => {
-                let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_integer()?;
+                let arg1 = self.unwrap_integer_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_integer_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs

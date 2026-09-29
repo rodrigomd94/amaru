@@ -86,13 +86,12 @@ impl<T: Ord, const N: usize> CompactSet<T, N> {
 
     /// Move all small values into the tree, permanently, and return it.
     fn promote(&mut self) -> &mut BTreeSet<T> {
-        loop {
-            match &mut self.storage {
-                SetStorage::Tree(entries) => return entries,
-                SetStorage::Small(entries) => {
-                    self.storage = SetStorage::Tree(entries.take().into_iter().collect());
-                }
-            }
+        if let SetStorage::Small(entries) = &mut self.storage {
+            self.storage = SetStorage::Tree(entries.take().into_iter().collect());
+        }
+        match &mut self.storage {
+            SetStorage::Tree(entries) => entries,
+            SetStorage::Small(_) => unreachable!("small storage was promoted above"),
         }
     }
 

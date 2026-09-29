@@ -175,3 +175,74 @@ fn valid_boundary_hash_still_obeys_execution_budget() {
         assert!(matches!(program.eval(&arena, CostModel::v3(), insufficient).term, Err(MachineError::OutOfExError(_))));
     }
 }
+
+// CInteger is used by these arithmetic/comparison operands in semantics D/E.
+// EqualsInteger and IData use unrestricted Integer instead.
+#[test]
+fn integer_operands_obey_signed_range_at_protocol_11() {
+    use amaru_uplc::constant::Integer;
+    let bound = Integer::from(1) << 262_143usize;
+    for language in [PlutusVersion::V1, PlutusVersion::V2, PlutusVersion::V3] {
+        for protocol in [10, 11, 12] {
+            for builtin in [
+                DefaultFunction::AddInteger,
+                DefaultFunction::SubtractInteger,
+                DefaultFunction::MultiplyInteger,
+                DefaultFunction::DivideInteger,
+                DefaultFunction::QuotientInteger,
+                DefaultFunction::RemainderInteger,
+                DefaultFunction::ModInteger,
+                DefaultFunction::LessThanInteger,
+                DefaultFunction::LessThanEqualsInteger,
+            ] {
+                for (integer, in_range) in
+                    [(&bound - 1, true), (-&bound, true), (bound.clone(), false), (-&bound - 1, false)]
+                {
+                    for position in [0, 1] {
+                        let arena = Arena::new();
+                        let large = Term::integer(&arena, arena.alloc_integer(integer.clone()));
+                        let one = Term::integer_from(&arena, 1);
+                        let (left, right) = if position == 0 { (large, one) } else { (one, large) };
+                        let term = Term::<DeBruijn>::builtin(&arena, builtin).apply(&arena, left).apply(&arena, right);
+                        let costs = match language {
+                            PlutusVersion::V1 => CostModel::DEFAULT_V1.as_slice(),
+                            PlutusVersion::V2 => CostModel::DEFAULT_V2.as_slice(),
+                            PlutusVersion::V3 => CostModel::DEFAULT_V3.as_slice(),
+                        };
+                        let program = Program::new(&arena, MachineVersion::V1_0_0, term);
+                        let result = program.eval(
+                            &arena,
+                            CostModel::new(language, ProtocolVersion::new(protocol, 0), costs),
+                            ExBudget::max(),
+                        );
+                        assert_eq!(
+                            result.term.is_ok(),
+                            protocol < 11 || in_range,
+                            "{language:?} protocol {protocol} {builtin:?} position {position} in_range {in_range}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn integer_results_equality_and_data_remain_unrestricted() {
+    use amaru_uplc::constant::Integer;
+    let arena = Arena::new();
+    let bound = Integer::from(1) << 262_143usize;
+    let outside = Term::integer(&arena, arena.alloc_integer(bound.clone()));
+    let max = Term::integer(&arena, arena.alloc_integer(&bound - 1));
+    let sum = Term::builtin(&arena, DefaultFunction::AddInteger)
+        .apply(&arena, max)
+        .apply(&arena, Term::integer_from(&arena, 1));
+    for term in [
+        sum,
+        Term::builtin(&arena, DefaultFunction::IData).apply(&arena, outside),
+        Term::builtin(&arena, DefaultFunction::EqualsInteger).apply(&arena, outside).apply(&arena, outside),
+    ] {
+        let program = Program::<DeBruijn>::new(&arena, MachineVersion::V1_1_0, term);
+        assert!(program.eval(&arena, CostModel::v3(), ExBudget::max()).term.is_ok());
+    }
+}

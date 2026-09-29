@@ -59,6 +59,11 @@ impl Semantics {
         matches!(self, Self::D | Self::E)
     }
 
+    /// Semantics D/E unlift selected operands as signed 262144-bit CInteger.
+    pub fn integer_operand_range_checks(&self) -> bool {
+        matches!(self, Self::D | Self::E)
+    }
+
     pub fn cons_byte_string_range_checks(&self) -> bool {
         matches!(self, Self::C | Self::E)
     }

@@ -49,6 +49,9 @@ Other guiding principles:
 
 ### Fixed
 
+- **amaru-kernel**: collection promotion compiles with the declared Rust 1.97 minimum version.
+- **amaru-uplc**: reject out-of-range integer operands for builtin semantics D/E while preserving unrestricted integer results, equality and data construction.
+
 - **amaru-uplc**: enforce protocol-11 byte-string operand bounds and return an evaluation error instead of panicking on constructor tags outside the Word64 range.
 
 - **amaru**: starting with many upstream peers no longer panics when connection attempts fail together, or when many name lookups fail or many peers are demoted at the same time. ([#1428](https://github.com/pragma-org/amaru/issues/1428))
