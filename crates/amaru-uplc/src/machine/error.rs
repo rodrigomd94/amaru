@@ -61,6 +61,10 @@ where
 
 #[derive(thiserror::Error, Debug)]
 pub enum RuntimeError<'a> {
+    #[error("Byte string operand exceeds 65536 bytes: {0}")]
+    ByteStringOperandTooLarge(usize),
+    #[error("Constructor tag is outside the Word64 range: {0}")]
+    ConstructorTagOutOfBounds(&'a Integer),
     #[error("Byte string out of bounds")]
     ByteStringOutOfBounds(&'a [u8], &'a Integer),
     #[error("Type mismatch")]

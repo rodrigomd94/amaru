@@ -123,6 +123,19 @@ where
 }
 
 impl<'a> Machine<'a> {
+    // Only CByteString arguments use this check. Results, BData, lengthOfByteString,
+    // signature keys, and hash-to-group domain separators remain unrestricted here.
+    fn unwrap_byte_string_operand<V>(&self, value: &'a Value<'a, V>) -> Result<&'a [u8], MachineError<'a, V>>
+    where
+        V: Eval<'a>,
+    {
+        let bytes = value.unwrap_byte_string()?;
+        if self.costs.semantics.byte_string_operand_range_checks() && bytes.len() > 65_536 {
+            return Err(MachineError::runtime(RuntimeError::ByteStringOperandTooLarge(bytes.len())));
+        }
+        Ok(bytes)
+    }
+
     pub fn call<V>(&mut self, runtime: &'a Runtime<'a, V>) -> Result<&'a Value<'a, V>, MachineError<'a, V>>
     where
         V: Eval<'a>,
@@ -148,8 +161,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::AppendByteString => {
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
-                let arg2 = runtime.args[1].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_byte_string_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -216,7 +229,7 @@ impl<'a> Machine<'a> {
             DefaultFunction::Blake2b_256 => {
                 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -311,7 +324,7 @@ impl<'a> Machine<'a> {
             }
             DefaultFunction::ConsByteString => {
                 let arg1 = runtime.args[0].unwrap_integer()?;
-                let arg2 = runtime.args[1].unwrap_byte_string()?;
+                let arg2 = self.unwrap_byte_string_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -365,7 +378,8 @@ impl<'a> Machine<'a> {
                     return Err(MachineError::type_mismatch(Type::Data, runtime.args[1].unwrap_constant()?));
                 }
 
-                let tag = tag.try_into().expect("should cast to u64 just fine");
+                let tag =
+                    tag.try_into().map_err(|_| MachineError::runtime(RuntimeError::ConstructorTagOutOfBounds(tag)))?;
                 let fields: BumpVec<'_, _> = fields
                     .iter()
                     .map(|d| match d {
@@ -384,7 +398,7 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::DecodeUtf8 => {
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -451,8 +465,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::EqualsByteString => {
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
-                let arg2 = runtime.args[1].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_byte_string_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -592,7 +606,7 @@ impl<'a> Machine<'a> {
                 if arg1 { Ok(arg2) } else { Ok(arg3) }
             }
             DefaultFunction::IndexByteString => {
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
                 let arg2 = runtime.args[1].unwrap_integer()?;
 
                 let budget = self
@@ -637,8 +651,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::LessThanByteString => {
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
-                let arg2 = runtime.args[1].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_byte_string_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -658,8 +672,8 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::LessThanEqualsByteString => {
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
-                let arg2 = runtime.args[1].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
+                let arg2 = self.unwrap_byte_string_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -1011,7 +1025,7 @@ impl<'a> Machine<'a> {
             DefaultFunction::Sha2_256 => {
                 use cryptoxide::{digest::Digest, sha2::Sha256};
 
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -1042,7 +1056,7 @@ impl<'a> Machine<'a> {
             DefaultFunction::Sha3_256 => {
                 use cryptoxide::{digest::Digest, sha3::Sha3_256};
 
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -1073,7 +1087,7 @@ impl<'a> Machine<'a> {
             DefaultFunction::SliceByteString => {
                 let arg1 = runtime.args[0].unwrap_integer()?;
                 let arg2 = runtime.args[1].unwrap_integer()?;
-                let arg3 = runtime.args[2].unwrap_byte_string()?;
+                let arg3 = self.unwrap_byte_string_operand(runtime.args[2])?;
 
                 let budget = self
                     .costs
@@ -1336,7 +1350,7 @@ impl<'a> Machine<'a> {
                 use cryptoxide::ed25519;
 
                 let public_key = runtime.args[0].unwrap_byte_string()?;
-                let message = runtime.args[1].unwrap_byte_string()?;
+                let message = self.unwrap_byte_string_operand(runtime.args[1])?;
                 let signature = runtime.args[2].unwrap_byte_string()?;
 
                 let budget = self
@@ -1372,7 +1386,7 @@ impl<'a> Machine<'a> {
                 use secp256k1::{Secp256k1, XOnlyPublicKey, schnorr::Signature};
 
                 let public_key = runtime.args[0].unwrap_byte_string()?;
-                let message = runtime.args[1].unwrap_byte_string()?;
+                let message = self.unwrap_byte_string_operand(runtime.args[1])?;
                 let signature = runtime.args[2].unwrap_byte_string()?;
 
                 let budget = self
@@ -1468,7 +1482,7 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::Bls12_381_G1_HashToGroup => {
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
                 let arg2 = runtime.args[1].unwrap_byte_string()?;
 
                 let budget = self
@@ -1661,7 +1675,7 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::Bls12_381_G2_HashToGroup => {
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
                 let arg2 = runtime.args[1].unwrap_byte_string()?;
 
                 let budget = self
@@ -1876,7 +1890,7 @@ impl<'a> Machine<'a> {
             DefaultFunction::Keccak_256 => {
                 use cryptoxide::{digest::Digest, sha3::Keccak256};
 
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -1907,7 +1921,7 @@ impl<'a> Machine<'a> {
             DefaultFunction::Blake2b_224 => {
                 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 
-                let arg1 = runtime.args[0].unwrap_byte_string()?;
+                let arg1 = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -2041,7 +2055,7 @@ impl<'a> Machine<'a> {
             }
             DefaultFunction::ByteStringToInteger => {
                 let endianness = runtime.args[0].unwrap_bool()?;
-                let bytes = runtime.args[1].unwrap_byte_string()?;
+                let bytes = self.unwrap_byte_string_operand(runtime.args[1])?;
 
                 let budget = self
                     .costs
@@ -2067,8 +2081,8 @@ impl<'a> Machine<'a> {
 
             DefaultFunction::AndByteString => {
                 let should_pad = runtime.args[0].unwrap_bool()?;
-                let left_bytes = runtime.args[1].unwrap_byte_string()?;
-                let right_bytes = runtime.args[2].unwrap_byte_string()?;
+                let left_bytes = self.unwrap_byte_string_operand(runtime.args[1])?;
+                let right_bytes = self.unwrap_byte_string_operand(runtime.args[2])?;
 
                 let budget = self
                     .costs
@@ -2103,8 +2117,8 @@ impl<'a> Machine<'a> {
             }
             DefaultFunction::OrByteString => {
                 let should_pad = runtime.args[0].unwrap_bool()?;
-                let left_bytes = runtime.args[1].unwrap_byte_string()?;
-                let right_bytes = runtime.args[2].unwrap_byte_string()?;
+                let left_bytes = self.unwrap_byte_string_operand(runtime.args[1])?;
+                let right_bytes = self.unwrap_byte_string_operand(runtime.args[2])?;
 
                 let budget = self
                     .costs
@@ -2141,8 +2155,8 @@ impl<'a> Machine<'a> {
             }
             DefaultFunction::XorByteString => {
                 let should_pad = runtime.args[0].unwrap_bool()?;
-                let left_bytes = runtime.args[1].unwrap_byte_string()?;
-                let right_bytes = runtime.args[2].unwrap_byte_string()?;
+                let left_bytes = self.unwrap_byte_string_operand(runtime.args[1])?;
+                let right_bytes = self.unwrap_byte_string_operand(runtime.args[2])?;
 
                 let budget = self
                     .costs
@@ -2178,7 +2192,7 @@ impl<'a> Machine<'a> {
                 Ok(value)
             }
             DefaultFunction::ComplementByteString => {
-                let bytes = runtime.args[0].unwrap_byte_string()?;
+                let bytes = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -2192,7 +2206,7 @@ impl<'a> Machine<'a> {
                 Ok(Value::byte_string(self.arena, result))
             }
             DefaultFunction::ReadBit => {
-                let bytes = runtime.args[0].unwrap_byte_string()?;
+                let bytes = self.unwrap_byte_string_operand(runtime.args[0])?;
                 let bit_index = runtime.args[1].unwrap_integer()?;
 
                 let budget = self
@@ -2243,6 +2257,10 @@ impl<'a> Machine<'a> {
                     .ok_or(MachineError::NoCostForBuiltin(DefaultFunction::WriteBits))?;
 
                 self.spend_budget(budget)?;
+
+                if self.costs.semantics.byte_string_operand_range_checks() && bytes.len() > 65_536 {
+                    return Err(MachineError::runtime(RuntimeError::ByteStringOperandTooLarge(bytes.len())));
+                }
 
                 for index in indices {
                     let Constant::Integer(bit_index) = index else { unreachable!("bit_index must be an integer") };
@@ -2472,7 +2490,7 @@ impl<'a> Machine<'a> {
                 Ok(Value::byte_string(self.arena, result))
             }
             DefaultFunction::CountSetBits => {
-                let bytes = runtime.args[0].unwrap_byte_string()?;
+                let bytes = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -2486,7 +2504,7 @@ impl<'a> Machine<'a> {
                 Ok(Value::integer(self.arena, result))
             }
             DefaultFunction::FindFirstSetBit => {
-                let bytes = runtime.args[0].unwrap_byte_string()?;
+                let bytes = self.unwrap_byte_string_operand(runtime.args[0])?;
 
                 let budget = self
                     .costs
@@ -2511,7 +2529,7 @@ impl<'a> Machine<'a> {
             }
             DefaultFunction::Ripemd_160 => {
                 use cryptoxide::{digest::Digest, ripemd160::Ripemd160};
-                let input = runtime.args[0].unwrap_byte_string()?;
+                let input = self.unwrap_byte_string_operand(runtime.args[0])?;
                 let budget = self
                     .costs
                     .builtin_costs
